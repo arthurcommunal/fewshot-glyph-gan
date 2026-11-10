@@ -1,0 +1,14 @@
+# Environment
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Data and outputs (large / regenerable)
+data/
+samples/
+runs/
+logs/
+checkpoints/
+*.pth
+*.pt
