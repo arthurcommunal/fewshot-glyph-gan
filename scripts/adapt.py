@@ -46,6 +46,24 @@ def variants(Gb, Cb, z_pool, step: int, pools: dict, a) -> None:
         z = refine_latents(Gb, Cb, z_pool, int(n), float(eta))
         with torch.no_grad():
             pools.setdefault(f"{step}_r{spec}", []).append(to_u8(Gb(z)).cpu())
+    for spec in filter(None, a.filter.split(",")):
+        q, ref = (spec[:-1], a.refine.split(",")[0]) if spec.endswith("r") else (spec, "")
+        x = critic_filter(Gb, Cb, z_pool.shape[1], float(q), a.seed + 20_000 + step, ref)
+        pools.setdefault(f"{step}_f{spec}", []).append(to_u8(x).cpu())
+
+
+def critic_filter(Gb, Cb, n: int, q: float, seed: int, refine: str = "") -> torch.Tensor:
+    """Generate n/q samples per symbol and keep the n with the highest adapted-critic score."""
+    K = Gb.K
+    m = int(round(n / q))
+    z = torch.randn(K, m, Z_DIM, generator=torch.Generator().manual_seed(seed)).to(next(Gb.buffers()).device)
+    if refine:
+        steps, eta = refine.split("x")
+        z = refine_latents(Gb, Cb, z, int(steps), float(eta))
+    with torch.no_grad():
+        x = Gb(z)
+        idx = Cb(x).topk(n, dim=1).indices                          # (K, n)
+        return x.gather(1, idx.unsqueeze(-1).expand(-1, -1, x.shape[-1]))
 
 
 def main():
@@ -75,6 +93,8 @@ def main():
     p.add_argument("--truncs", default="0.7", help="extra pools at every eval step > 0 with z * psi (truncation)")
     p.add_argument("--refine", default="10x0.1",
                    help="extra pools at every eval step > 0 with critic-guided latent refinement: n_steps x step_size")
+    p.add_argument("--filter", default="", help="extra pools: keep the best fraction q of pool/q samples by adapted "
+                   "critic score (discriminator rejection sampling, Azadi et al. 2019), e.g. '0.5'; 'r' suffix = refine first")
     a = p.parse_args()
 
     dev = torch.device("cuda")
