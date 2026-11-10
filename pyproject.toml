@@ -5,6 +5,7 @@ description = "Few-shot adaptation of a fixed-capacity WGAN generator to new han
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "matplotlib>=3.11.2",
     "numpy>=2.5.4",
     "pillow>=13.0.0",
     "scikit-learn>=1.9.1",

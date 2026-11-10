@@ -60,8 +60,75 @@ def best_under(results, min_copy):
     return max(ok, key=lambda r: r["objective"]) if ok else None
 
 
+def copy_feat(r):
+    return r["summary"]["copy_feat"]["mean"]
+
+
+def pareto(results):
+    """Upper frontier of (copy_feat, objective): configs not beaten on both axes."""
+    out, best = [], -1.0
+    for r in sorted(results, key=lambda r: (-copy_feat(r), -r["objective"])):
+        if r["objective"] > best:
+            out.append(r)
+            best = r["objective"]
+    return out
+
+
+def to_u8(x):
+    return ((x.clamp(-1, 1) + 1) * 127.5).round().to(torch.uint8)
+
+
+def replay(a, ext):
+    """Pre-registered rule (README, "Problem and protocol"): max dev objective s.t. copy_feat >= 0.9, replayed once on test, plus
+    the dev Pareto frontier, references and the real ceiling on test; uint8 pools for scripts.eval_pools."""
+    out = Path(a.out)
+    results = json.loads((out / "search.json").read_text())
+    feasible = [r for r in results if copy_feat(r) >= a.min_copy_feat]
+    sel = max(feasible, key=lambda r: r["objective"])
+    (out / "selected_feat09.json").write_text(json.dumps({
+        "selection": f"max dev objective s.t. copy_feat >= {a.min_copy_feat}", "name": sel["name"],
+        "params": sel["params"], "objective": sel["objective"], "summary": sel["summary"]}, indent=1))
+    print(f"selected {sel['name']} {sel['params']}\n  dev {fmt(sel['summary'])}", flush=True)
+
+    best_name = json.loads((out / "best.json").read_text())["name"]
+    by = {r["name"]: r for r in results}
+    tags: dict[str, list[str]] = {}
+    for name, tag in [(sel["name"], "selected_feat09"), (best_name, "best_copy_pix"), ("weak", "weak"),
+                      ("identity", "identity")] + [(r["name"], "dev_frontier") for r in pareto(results)]:
+        tags.setdefault(name, []).append(tag)
+
+    test = episodes("test")
+    print(f"{len(test)} test episodes", flush=True)
+    rows_out = []
+    for name, tg in tags.items():
+        _, summ = evaluate(AugmentSampler(by[name]["params"]), test, ext, n_draws=a.n_draws)
+        rows_out.append({"name": name, "params": by[name]["params"], "objective": objective(summ), "summary": summ,
+                         "tags": tg, "dev_objective": by[name]["objective"], "dev_copy_feat": copy_feat(by[name])})
+        (out / "test_frontier.json").write_text(json.dumps(rows_out, indent=1))
+        print(f"[test {name} {','.join(tg)}] {fmt(summ)}", flush=True)
+    rows, summ = evaluate(support_sampler, test, ext, n_draws=a.n_draws)
+    save_rows(rows, summ, "runs/eval/support_test.json")
+    print(f"[test support ceiling] {fmt(summ)}", flush=True)
+
+    for tag, name in [("aug_feat09", sel["name"]), ("aug_best", best_name)]:
+        sampler = AugmentSampler(by[name]["params"])
+        for part, eps in [("dev", episodes("dev")), ("test", test)]:
+            d = Path("runs/adapt") / f"{tag}_{part}"
+            d.mkdir(parents=True, exist_ok=True)
+            pool = torch.stack([to_u8(sampler(ep, a.pool, torch.Generator().manual_seed(a.seed * 1_000_003 + ep.char)))
+                                for ep in eps])
+            torch.save({"char_ids": torch.tensor([ep.char for ep in eps]), "pool": pool}, d / "pools_0.pt")
+            (d / "config.json").write_text(json.dumps({"part": part, "max_chars": None, "method": "augment",
+                                                       "name": name, "params": by[name]["params"],
+                                                       "pool": a.pool, "seed": a.seed}, indent=1))
+            print(f"pool {d} {tuple(pool.shape)}", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--replay", action="store_true", help="apply the copy_feat rule, evaluate on test, dump pools")
+    ap.add_argument("--min-copy-feat", type=float, default=0.9)
+    ap.add_argument("--pool", type=int, default=100)
     ap.add_argument("--out", default="runs/augment")
     ap.add_argument("--clf", default="runs/features/clf.pt")
     ap.add_argument("--n-random", type=int, default=70)
@@ -77,6 +144,8 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     ext = FeatureExtractor.load(a.clf, dev)
+    if a.replay:
+        return replay(a, ext)
     eps = episodes("dev", max_chars=a.max_chars)
     print(f"{len(eps)} dev episodes, device {dev}", flush=True)
 

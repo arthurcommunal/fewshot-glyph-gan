@@ -37,7 +37,7 @@ def refine_latents(Gb, Cb, z, n_steps: int, step_size: float) -> torch.Tensor:
 
 
 def variants(Gb, Cb, z_pool, step: int, pools: dict, a) -> None:
-    """Extra pools at the last step: truncation (z * psi) and critic-guided refinement of the same latents."""
+    """Extra pools at an eval step: truncation (z * psi) and critic-guided refinement of the same latents."""
     for psi in filter(None, a.truncs.split(",")):
         with torch.no_grad():
             pools.setdefault(f"{step}_t{psi}", []).append(to_u8(Gb(float(psi) * z_pool)).cpu())
@@ -72,9 +72,9 @@ def main():
     p.add_argument("--chunk", type=int, default=128, help="characters adapted simultaneously")
     p.add_argument("--pool", type=int, default=100)
     p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--truncs", default="0.7", help="extra pools at the last step with z * psi (truncation)")
-    p.add_argument("--refine", default="10x0.1,10x0.3",
-                   help="extra pools at the last step with critic-guided latent refinement: n_steps x step_size")
+    p.add_argument("--truncs", default="0.7", help="extra pools at every eval step > 0 with z * psi (truncation)")
+    p.add_argument("--refine", default="10x0.1",
+                   help="extra pools at every eval step > 0 with critic-guided latent refinement: n_steps x step_size")
     a = p.parse_args()
 
     dev = torch.device("cuda")
@@ -117,6 +117,8 @@ def main():
                        "w_support_fake": float(cs[i] - cf[i]), "sec": time.time() - t0}
                 diag.write(json.dumps(row) + "\n")
             diag.flush()
+            if step > 0:
+                variants(Gb, Cb, z_pool, step, pools, a)
             if c0 == 0:
                 grid = torch.cat([S[:8], x[:8, :20]], 1).reshape(-1, 1, 28, 28)
                 torchvision.utils.save_image((grid + 1) / 2, out / f"grid_{step}.png", nrow=n_sup + 20)
@@ -140,7 +142,6 @@ def main():
             opt_g.step()
             if step in eval_steps:
                 snapshot(step)
-        variants(Gb, Cb, z_pool, eval_steps[-1], pools, a)
         print(json.dumps({"chunk": c0, "K": K, "sec": round(time.time() - t0, 1),
                           "adapter_params": Gb.adapter_numel()}), flush=True)
         if a.mode == "lora":
