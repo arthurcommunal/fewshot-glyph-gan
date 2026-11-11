@@ -7,9 +7,25 @@ characters, then adapted to each *unseen* character from only 10 examples. Adapt
 **as novel as fresh human drawings while staying recognisable**, a regime where the strongest hand-tuned augmentation
 baseline cannot follow.
 
-<!-- RESULTS_TABLE -->
+**Test set: 314 characters from 10 alphabets never seen in training. Each method's configuration was selected on a
+separate dev set by one rule fixed in advance (see Protocol). 95% CIs from a paired bootstrap over characters.**
 
-![fidelity-novelty frontier](docs/figures/frontier.png)
+| Method (10 drawings in) | Objective ↑ | Precision ↑ | Coverage ↑ | Identity ↑ | Novelty (copy_feat, 1 = fresh data) |
+|---|---|---|---|---|---|
+| **GAN + LoRA r=16 adapter** (selected) | **0.755** [0.738, 0.771] | 0.735 | 0.775 | **0.874** | 0.95 |
+| GAN, full fine-tuning | 0.746 [0.730, 0.762] | 0.719 | 0.775 | 0.863 | 0.96 |
+| GAN + LoRA r=1 adapter (4.5k params, 9 KB) | 0.730 [0.712, 0.747] | 0.724 | 0.736 | 0.866 | 0.96 |
+| Hand-tuned augmentation, same selection rule | 0.542 [0.521, 0.563] | 0.535 | 0.549 | 0.855 | 0.98 |
+| *Reference:* augmentation tuned without the novelty rule | 0.791 | 0.793 | 0.789 | 0.906 | **0.59** (shifted copies) |
+| *Reference:* the 10 real drawings themselves | 0.882 | 0.855 | 0.911 | 0.915 | 0 (they *are* the support) |
+
+*Precision / coverage*: generated samples vs the 10 held-out drawings of the character, in a learned feature space;
+*objective* = their harmonic mean; *identity* = sample closest to the right character among its alphabet;
+*copy_feat* = distance to the support relative to the spread of the support (fresh human drawings ≈ 1, copies = 0).
+
+**GAN − augmentation, paired: objective +0.213 [+0.196, +0.230], identity +0.018 [+0.009, +0.028].** At equal novelty the
+adapted generator is far more faithful than any augmentation we could tune, and a per-symbol adapter of 71k parameters
+(4.8% of the generator, about 140 KB in fp16) matches full fine-tuning.
 
 ## Where this comes from
 
@@ -60,20 +76,55 @@ models?
    computation: shared frozen base weights (one matmul), per-character LoRA factors (bmm), K critic copies as grouped
    convolutions, with frozen critic layers computed once for all K. The loss is the sum of the K per-character losses,
    so each character gets exactly its own gradient (Adam is element-wise): mathematically identical to K separate runs,
-   verified in `tests/test_batched.py`. 345 characters × 3000 steps take about 25 minutes on one 20 GB GPU (about 4 s
-   per character).
+   verified in `tests/test_batched.py`. 345 characters × 3000 steps take about 22 minutes on one 20 GB GPU: the
+   selected 1500-step adaptation costs **about 2 s of GPU time per new symbol**, amortised.
 
 ## Results
 
-<!-- RESULTS_DETAIL -->
+![test frontier](docs/figures/test/frontier.png)
+
+*Test split. Each GAN line is one adaptation run seen at increasing steps (longer adaptation: more faithful, less novel).
+Diamonds: same generator with critic-guided latent refinement. Grey: 103 augmentation configurations replayed on test
+(their dev Pareto frontier). Left of 0.9 the samples are essentially copies of the support. Stars: the configurations
+picked by the rule on dev. The augmentation star (0.530) is evaluated on fresh samples; the table uses the fixed pool of
+100 samples per character that the paired bootstrap needs (0.542), the same protocol as for the GAN.*
+
+![samples](docs/figures/test/samples.png)
+
+*Test characters: the 10 support drawings, the augmentation selected by the same novelty rule, and the adapted generator
+(LoRA r=16). At equal novelty, augmentation has to distort the glyph; the generator produces new, clean variants.*
+
+**Is a better prior a better few-shot learner?** Adapting from successive pretraining checkpoints (10k / 30k / 80k
+steps) improves the objective monotonically but modestly (0.662 → 0.669 → 0.676 on 128 dev characters): most of the
+gain comes from adaptation itself.
 
 ## Baselines and ablations
 
-<!-- ABLATIONS -->
+All on dev (345 characters) unless stated.
+
+| Change | Effect |
+|---|---|
+| No DiffAugment on the critic | objective 0.607 → 0.554 (LoRA r=4); critic score gap support − held-out at step 500: 1.9 → 7.6: the critic memorises the 10 images and the generator follows it into copying |
+| Critic-guided latent refinement (inference only) | +0.087 objective on test (full FT, 0.659 → 0.746), at the cost of −0.10 novelty |
+| Critic rejection sampling (keep best 50%) | +0.05 objective with *more* novelty than refinement (0.759 at copy_feat 0.95), but not selected by the rule |
+| Truncation ψ = 0.7 | more novel but less faithful and less recognisable with this generator: never selected |
+| FreezeD (freeze 2 lower critic blocks) | same quality as no freezing, 2× faster: kept |
+| LoRA learning rate 3e-3 (fine on an early checkpoint) | mode collapse on the final checkpoint (recall 0.2); 1e-4 to 3e-4 required. Not caused by batching (control run with 128 characters) |
+| LoRA rank r = 1 / 4 / 16 / 64 | 0.759 / 0.761 / **0.772** / 0.747 under the rule: rank matters little once the learning rate is right |
+| **Prior only**: invert the 10 drawings into the frozen generator's latent space, sample around them | best objective 0.586 at copy_feat 0.82 (near-copies); any noise σ ≥ 0.1 drifts to other characters (identity 0.72). **Adapting the weights is necessary** |
 
 ## Limitations
 
-<!-- LIMITATIONS -->
+- **28×28, binary-ish strokes, an MLP generator.** Samples are visibly blurrier than real drawings (precision 0.74 vs 0.86
+  for real data). Moving to the native 105×105 resolution would multiply the output layer by 14 for mostly empty pixels
+  and break the fixed-capacity premise.
+- **Metrics live in one feature space** (a classifier trained on the background alphabets). All methods are measured in
+  the same space, but a single embedding can be gamed; identity accuracy is a partial
+  cross-check.
+- **The novelty threshold (copy_feat ≥ 0.9) is a choice.** It was fixed before any test run and the whole frontier is
+  shown; the GAN stays above the augmentation frontier everywhere above about 0.65, and the gap closes in the copy
+  regime, where returning shifted copies of the support is hard to beat.
+- One adaptation seed per configuration. Reruns of the selected configuration reproduce dev 0.771/0.772 and test 0.746/0.745.
 
 ## Reproduce
 
@@ -83,10 +134,11 @@ python -m glyphgan.data --root data                       # Omniglot -> data/omn
 python -m scripts.train_features                          # feature extractor for the metrics
 python -m scripts.pretrain --run gp_b --steps 200000 --lr_g 2e-4 --lr_c 2e-4 --beta1 0.5
 python -m scripts.select_pretrain runs/pretrain/gp_b
-python -m scripts.adapt --ckpt runs/pretrain/gp_b/ckpt_200000.pt --mode full --lr_g 1e-4 --chunk 173 \
-       --part dev --steps 3000 --eval_steps 250,500,1000,1500,2000,3000 --run g2_full_lr1e-4
-python -m scripts.eval_pools runs/adapt/g2_full_lr1e-4
-python -m scripts.select_rule runs/adapt/g2_* --out runs/select_dev.json
+python -m scripts.adapt --ckpt runs/pretrain/gp_b/ckpt_200000.pt --r 16 --lr_g 1e-4 --chunk 345 \
+       --part dev --steps 3000 --eval_steps 250,500,1000,1500,2000,3000 --run g3_lora16_lr1e-4
+python -m scripts.eval_pools runs/adapt/g3_lora16_lr1e-4
+python -m scripts.select_rule runs/adapt/g* --out runs/select_dev.json      # pre-registered rule, dev only
+python -m scripts.headline GAN=runs/adapt/t3_lora16_lr1e-4/eval_1500_r10x0.1.json AUG=runs/adapt/aug_feat09_test/eval_0.json
 ```
 
 ## Repository
