@@ -132,6 +132,23 @@ All on dev (345 characters) unless stated.
   differences within ±0.001). Other configurations were run with one seed. The dev selection between LoRA r=16 (0.7724)
   and full fine-tuning (0.7720) is a near-tie that the pre-registered rule settles; both are reported.
 
+## Interactive demo
+
+Draw a new symbol a few times, click **Generate**: the pretrained generator is adapted to it with the configuration
+selected on dev (LoRA r = 16, 1500 steps, about 20 s on an Apple-silicon GPU through MPS, about 3 min on 2 CPU
+threads), then samples new drawings of it.
+
+<!-- demo video: docs/figures/demo.mp4 -->
+
+```bash
+uv sync --extra demo
+uv run python -m scripts.demo                     # http://127.0.0.1:7860, needs checkpoints/gp_b_200k.pt
+```
+Drawings are mapped to the training distribution before adaptation (`glyphgan/drawing.py`): the ink is cropped and
+rescaled to the median Omniglot glyph size, strokes are thinned to a skeleton and re-thickened to the Omniglot stroke
+width (radius calibrated on real glyphs: the round trip changes a real glyph by 0.039 per pixel on average), then the
+training preprocessing is applied unchanged. Position, size and brush width on the canvas therefore do not matter.
+
 ## Reproduce
 
 ```bash
@@ -156,5 +173,6 @@ python -m scripts.headline GAN=runs/adapt/t3_lora16_lr1e-4/eval_1500_r10x0.1.jso
 | `glyphgan/batched.py` | K adaptations as one batched computation |
 | `glyphgan/features.py`, `metrics.py`, `evaluate.py` | feature extractor, PRDC / copy / identity metrics, evaluation harness |
 | `glyphgan/augment.py` | augmentation baseline (affine, elastic, stroke thickness) |
+| `glyphgan/drawing.py`, `fewshot.py`, `scripts/demo.py` | canvas preprocessing, single-symbol adaptation, Gradio demo |
 | `scripts/` | pretraining, adaptation, evaluation, baselines, selection rule, figures |
 | `mnist/` | the original fixed-architecture MNIST project |

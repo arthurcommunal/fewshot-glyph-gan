@@ -40,10 +40,11 @@ def test_grouped_critic_and_gp():
     Cb = GroupedCritic(Cs[0], K)
     with torch.no_grad():  # give each group the weights of a different critic
         convs = [[m for m in c.net if isinstance(m, torch.nn.Conv2d)] for c in Cs]
+        lins = [m for c in Cs for m in c.net[-1:] if isinstance(m, torch.nn.Linear)]
         for i in range(3):
             getattr(Cb, f"c{i}_w").copy_(torch.cat([cv[i].weight for cv in convs]))
-            getattr(Cb, f"c{i}_b").copy_(torch.cat([cv[i].bias for cv in convs]))
-        Cb.lin_w.copy_(torch.cat([c.net[-1].weight for c in Cs])); Cb.lin_b.copy_(torch.cat([c.net[-1].bias for c in Cs]))
+            getattr(Cb, f"c{i}_b").copy_(torch.cat([b for cv in convs if (b := cv[i].bias) is not None]))
+        Cb.lin_w.copy_(torch.cat([m.weight for m in lins])); Cb.lin_b.copy_(torch.cat([m.bias for m in lins]))
     x = torch.rand(K, B, 784) * 2 - 1
     s = Cb(x)
     for k in range(K):

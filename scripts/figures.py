@@ -283,7 +283,7 @@ def strip(imgs: np.ndarray, sep: int = 2) -> np.ndarray:
     return out
 
 
-def samples_fig(root: Path, pools: list[str], best_path: Path, n_chars: int, char_ids: list[int] | None, n: int,
+def samples_fig(root: Path, pools: list[str], best_path: Path | None, n_chars: int, char_ids: list[int] | None, n: int,
                 seed: int, out: Path):
     import torch
 
@@ -316,7 +316,7 @@ def samples_fig(root: Path, pools: list[str], best_path: Path, n_chars: int, cha
         for j, b in enumerate(blocks):
             ax = axes[i, j]
             ax.imshow(strip(b), cmap="gray", vmin=0, vmax=255, interpolation="nearest")
-            ax.set_xticks([]), ax.set_yticks([]), ax.grid(False)
+            ax.set_xticks([]); ax.set_yticks([]); ax.grid(False)
             for s in ax.spines.values():
                 s.set_visible(False)
             if i == 0:
