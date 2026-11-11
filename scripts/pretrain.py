@@ -9,6 +9,7 @@ with the Omniglot feature extractor, which is trained in parallel.
 import argparse
 import copy
 import json
+import os
 import time
 from pathlib import Path
 
@@ -17,6 +18,13 @@ import torchvision
 
 from glyphgan.data import load_split
 from glyphgan.models import CNNCritic, Z_DIM, ema_update, gradient_penalty, new_generator
+
+
+def atomic_save(obj, path: Path) -> None:
+    """Write to a temporary file then rename: an interrupted save never leaves a truncated checkpoint behind."""
+    tmp = path.with_suffix(".tmp")
+    torch.save(obj, tmp)
+    os.replace(tmp, path)
 
 
 def main():
@@ -91,9 +99,9 @@ def main():
         if step % a.ckpt_every == 0 or step == a.steps:
             with torch.no_grad():
                 torchvision.utils.save_image((G_ema(z_fixed).view(-1, 1, a.size, a.size) + 1) / 2, out / f"samples_{step}.png", nrow=16)
-            torch.save({"G": G.state_dict(), "G_ema": G_ema.state_dict(), "critic": C.state_dict(),
+            atomic_save({"G": G.state_dict(), "G_ema": G_ema.state_dict(), "critic": C.state_dict(),
                         "critic_w": a.critic_w, "size": a.size, "step": step}, out / f"ckpt_{step}.pt")
-            torch.save({"G": G.state_dict(), "G_ema": G_ema.state_dict(), "critic": C.state_dict(),
+            atomic_save({"G": G.state_dict(), "G_ema": G_ema.state_dict(), "critic": C.state_dict(),
                         "opt_g": opt_g.state_dict(), "opt_c": opt_c.state_dict(), "step": step}, out / "last.pt")
 
 

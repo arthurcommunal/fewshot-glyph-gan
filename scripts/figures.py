@@ -108,11 +108,20 @@ def load_run(root: Path, spec: str, min_step: int, keep: set[str] | None = None)
             "variants": sorted(variants, key=lambda p: (p["step"], p["variant"]))}
 
 
-def load_augment(path: Path) -> list[dict]:
-    return [point(r["summary"]) | {"name": r["name"]} for r in json.loads(path.read_text())]
+def _search_entries(paths: list[Path]) -> list[dict]:
+    """Concatenation of several search lists (e.g. search.json + search_v2.json); later files win on name clashes."""
+    by = {}
+    for p in paths:
+        for r in json.loads(Path(p).read_text()):
+            by[r["name"]] = r
+    return list(by.values())
 
 
-def load_aug_selected(spec: str | None, search: Path) -> dict | None:
+def load_augment(paths: list[Path]) -> list[dict]:
+    return [point(r["summary"]) | {"name": r["name"]} for r in _search_entries(paths)]
+
+
+def load_aug_selected(spec: str | None, search: list[Path]) -> dict | None:
     """The rule-selected augmentation config: a JSON file with a "summary" (e.g. runs/augment/selected_feat09.json),
     or a name / tag looked up in the --search list (e.g. "selected_feat09" in runs/augment/test_frontier.json)."""
     if not spec:
@@ -120,7 +129,7 @@ def load_aug_selected(spec: str | None, search: Path) -> dict | None:
     if Path(spec).is_file():
         e = json.loads(Path(spec).read_text())
         return point(e["summary"], e.get("rows")) | {"name": e.get("name", Path(spec).stem)}
-    hits = [e for e in json.loads(search.read_text()) if e["name"] == spec or spec in e.get("tags", [])]
+    hits = [e for e in _search_entries(search) if e["name"] == spec or spec in e.get("tags", [])]
     assert len(hits) == 1, f"--aug-selected {spec}: {len(hits)} matches in {search}"
     return point(hits[0]["summary"]) | {"name": hits[0]["name"]}
 
@@ -326,7 +335,8 @@ def main():
     ap.add_argument("--runs", nargs="*", default=[], help="RUN[=FAMILY] under <root>/adapt")
     ap.add_argument("--pools", nargs="*", default=[], help="RUN:LABEL[=TITLE] -> <root>/adapt/RUN/pools_LABEL.pt")
     ap.add_argument("--root", default="runs")
-    ap.add_argument("--search", default="runs/augment/search.json")
+    ap.add_argument("--search", nargs="+", default=["runs/augment/search.json"],
+                    help="augmentation search list(s), merged (e.g. search.json search_v2.json)")
     ap.add_argument("--aug-params", default=None,
                     help="samples.png: extra on-the-fly AugmentSampler column from this JSON's 'params' (e.g. "
                          "runs/augment/selected_feat09.json); default none, pass augmentation pools via --pools")
@@ -358,10 +368,11 @@ def main():
     if only & {"frontier", "identity"}:
         keep = set(a.variants.split(",")) if a.variants else None
         runs = [load_run(root, s, a.min_step, keep) for s in a.runs]
-        aug = load_augment(Path(a.search))
+        aug = load_augment([Path(s) for s in a.search])
         real_e = json.loads(Path(a.real).read_text())
         real = point(real_e["summary"], real_e.get("rows"))
-        sel = dict(sel_gan=load_selected(root, a.selected), sel_aug=load_aug_selected(a.aug_selected, Path(a.search)))
+        sel = dict(sel_gan=load_selected(root, a.selected), sel_aug=load_aug_selected(a.aug_selected,
+                                                                                  [Path(s) for s in a.search]))
         ann = a.annotate or (runs[0]["name"] if runs else None)
         if "frontier" in only:
             frontier_fig(runs, aug, real, "objective", "Fidelity: objective = harmonic mean(precision, coverage)",

@@ -88,10 +88,10 @@ models?
 ![test frontier](docs/figures/test/frontier.png)
 
 *Test split. Each GAN line is one adaptation run seen at increasing steps (longer adaptation: more faithful, less novel).
-Diamonds: same generator with critic-guided latent refinement. Grey: 103 augmentation configurations replayed on test
-(their dev Pareto frontier). Left of 0.9 the samples are essentially copies of the support. Stars: the configurations
-picked by the rule on dev. The augmentation star (0.530) is evaluated on fresh samples; the table uses the fixed pool of
-100 samples per character that the paired bootstrap needs (0.542), the same protocol as for the GAN.*
+Diamonds: same generator with critic-guided latent refinement. Grey: the dev Pareto frontier of the first augmentation
+search, replayed on test. Left of 0.9 the samples are essentially copies of the support. Stars: the configurations
+picked by the rule on dev. The augmentation star comes from the second, correctly constrained search (see the fairness
+note), which is why it sits above the grey frontier.*
 
 ![samples](docs/figures/test/samples.png)
 
