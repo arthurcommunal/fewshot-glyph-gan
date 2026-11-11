@@ -15,7 +15,7 @@ separate dev set by one rule fixed in advance (see Protocol). 95% CIs from a pai
 | **GAN + LoRA r=16 adapter** (selected) | **0.755** [0.738, 0.771] | 0.735 | 0.775 | **0.874** | 0.95 |
 | GAN, full fine-tuning | 0.746 [0.730, 0.762] | 0.719 | 0.775 | 0.863 | 0.96 |
 | GAN + LoRA r=1 adapter (4.5k params, 9 KB) | 0.730 [0.712, 0.747] | 0.724 | 0.736 | 0.866 | 0.96 |
-| Hand-tuned augmentation, same selection rule | 0.542 [0.521, 0.563] | 0.535 | 0.549 | 0.855 | 0.98 |
+| Hand-tuned augmentation, same selection rule | 0.589 [0.569, 0.609] | 0.581 | 0.597 | 0.854 | 0.93 |
 | *Reference:* augmentation tuned without the novelty rule | 0.791 | 0.793 | 0.789 | 0.906 | **0.59** (shifted copies) |
 | *Reference:* the 10 real drawings themselves | 0.882 | 0.855 | 0.911 | 0.915 | 0 (they *are* the support) |
 
@@ -23,9 +23,13 @@ separate dev set by one rule fixed in advance (see Protocol). 95% CIs from a pai
 *objective* = their harmonic mean; *identity* = sample closest to the right character among its alphabet;
 *copy_feat* = distance to the support relative to the spread of the support (fresh human drawings ≈ 1, copies = 0).
 
-**GAN − augmentation, paired: objective +0.213 [+0.196, +0.230], identity +0.018 [+0.009, +0.028].** At equal novelty the
+**GAN − augmentation, paired: objective +0.166 [+0.151, +0.181], identity +0.019 [+0.009, +0.030].** At equal novelty the
 adapted generator is far more faithful than any augmentation we could tune, and a per-symbol adapter of 71k parameters
 (4.8% of the generator, about 140 KB in fp16) matches full fine-tuning.
+
+*Fairness note.* An independent audit found the augmentation search had been refined under a pixel-space copy
+constraint instead of the feature-space one used by the rule; a second search (85 more configurations) under the
+correct constraint raised the baseline from 0.542 to 0.589 on test. The table reports the stronger baseline.
 
 ## Where this comes from
 
@@ -140,7 +144,7 @@ python -m scripts.adapt --ckpt runs/pretrain/gp_b/ckpt_200000.pt --r 16 --lr_g 1
        --part dev --steps 3000 --eval_steps 250,500,1000,1500,2000,3000 --run g3_lora16_lr1e-4
 python -m scripts.eval_pools runs/adapt/g3_lora16_lr1e-4
 python -m scripts.select_rule runs/adapt/g* --out runs/select_dev.json      # pre-registered rule, dev only
-python -m scripts.headline GAN=runs/adapt/t3_lora16_lr1e-4/eval_1500_r10x0.1.json AUG=runs/adapt/aug_feat09_test/eval_0.json
+python -m scripts.headline GAN=runs/adapt/t3_lora16_lr1e-4/eval_1500_r10x0.1.json AUG=runs/adapt/aug_feat09v2_test/eval_0.json
 ```
 
 ## Repository
