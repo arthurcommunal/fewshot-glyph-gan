@@ -38,6 +38,7 @@ def main():
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--data", default="data")
     p.add_argument("--resume", action="store_true")
+    p.add_argument("--size", type=int, default=28, help="28 (fixed generator) or 56 (output layer widened)")
     a = p.parse_args()
 
     torch.manual_seed(a.seed)
@@ -47,10 +48,10 @@ def main():
     out.mkdir(parents=True, exist_ok=a.resume)
     (out / "config.json").write_text(json.dumps(vars(a), indent=2))
 
-    x = load_split(a.data, "background").x.to(dev)
-    G = new_generator().to(dev)
+    x = load_split(a.data, "background", a.size).x.to(dev)
+    G = new_generator(a.size * a.size).to(dev)
     G_ema = copy.deepcopy(G).eval()
-    C = CNNCritic(a.critic_w).to(dev)
+    C = CNNCritic(a.critic_w, a.size).to(dev)
     opt_g = torch.optim.Adam(G.parameters(), lr=a.lr_g, betas=(a.beta1, a.beta2))
     opt_c = torch.optim.Adam(C.parameters(), lr=a.lr_c, betas=(a.beta1, a.beta2))
     start = 1
@@ -89,9 +90,9 @@ def main():
             acc = {"w": 0.0, "gp": 0.0, "n": 0}; t0 = time.time()
         if step % a.ckpt_every == 0 or step == a.steps:
             with torch.no_grad():
-                torchvision.utils.save_image((G_ema(z_fixed).view(-1, 1, 28, 28) + 1) / 2, out / f"samples_{step}.png", nrow=16)
+                torchvision.utils.save_image((G_ema(z_fixed).view(-1, 1, a.size, a.size) + 1) / 2, out / f"samples_{step}.png", nrow=16)
             torch.save({"G": G.state_dict(), "G_ema": G_ema.state_dict(), "critic": C.state_dict(),
-                        "critic_w": a.critic_w, "step": step}, out / f"ckpt_{step}.pt")
+                        "critic_w": a.critic_w, "size": a.size, "step": step}, out / f"ckpt_{step}.pt")
             torch.save({"G": G.state_dict(), "G_ema": G_ema.state_dict(), "critic": C.state_dict(),
                         "opt_g": opt_g.state_dict(), "opt_c": opt_c.state_dict(), "step": step}, out / "last.pt")
 

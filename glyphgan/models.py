@@ -18,8 +18,9 @@ Z_DIM = 100
 X_DIM = 784
 
 
-def new_generator() -> Generator:
-    g = Generator(g_output_dim=X_DIM)
+def new_generator(out_dim: int = X_DIM) -> Generator:
+    """The fixed MLP; out_dim = 784 (28x28). The 56x56 variant only widens the output layer (1024 -> 3136)."""
+    g = Generator(g_output_dim=out_dim)
     for m in g.modules():
         if isinstance(m, nn.Linear):
             nn.init.kaiming_normal_(m.weight, a=0.2, nonlinearity="leaky_relu")
@@ -31,17 +32,19 @@ class CNNCritic(nn.Module):
     """DCGAN-like critic without normalization (compatible with the gradient penalty). Free to choose: only the
     generator architecture is imposed."""
 
-    def __init__(self, w: int = 64):
+    def __init__(self, w: int = 64, size: int = 28):
         super().__init__()
-        self.w = w
+        self.w, self.size = w, size
+        stem = [nn.Conv2d(1, w // 2, 4, 2, 1), nn.LeakyReLU(0.2)] if size == 56 else []   # 56 -> 28
         self.net = nn.Sequential(
-            nn.Conv2d(1, w, 4, 2, 1), nn.LeakyReLU(0.2),          # 28 -> 14
+            *stem,
+            nn.Conv2d(w // 2 if size == 56 else 1, w, 4, 2, 1), nn.LeakyReLU(0.2),          # 28 -> 14
             nn.Conv2d(w, 2 * w, 4, 2, 1), nn.LeakyReLU(0.2),      # 14 -> 7
             nn.Conv2d(2 * w, 4 * w, 3, 2, 1), nn.LeakyReLU(0.2),  # 7 -> 4
             nn.Flatten(), nn.Linear(4 * w * 16, 1))
 
     def forward(self, x):
-        return self.net(x.view(-1, 1, 28, 28)).squeeze(1)
+        return self.net(x.view(-1, 1, self.size, self.size)).squeeze(1)
 
 
 def gradient_penalty(critic: nn.Module, real: torch.Tensor, fake: torch.Tensor) -> torch.Tensor:

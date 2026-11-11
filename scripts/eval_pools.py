@@ -32,6 +32,10 @@ def main():
             if (run / f"eval_{label}.json").exists():
                 continue
             d = torch.load(f)
+            if d["pool"].shape[-1] != 784:   # 56x56 variant: metrics at 28x28 (2x2 average pooling), like every method
+                n = int(round(d["pool"].shape[-1] ** 0.5)); N, P = d["pool"].shape[:2]
+                x = torch.nn.functional.avg_pool2d(d["pool"].float().view(N * P, 1, n, n), n // 28)
+                d["pool"] = x.round().clamp(0, 255).to(torch.uint8).view(N, P, 784)
             rows, summary = evaluate_pools(d["pool"], d["char_ids"], eps, ext)
             gaps = [r["gap_support_heldout"] for r in diag if r["step"] == step] if label == str(step) else []
             if gaps:

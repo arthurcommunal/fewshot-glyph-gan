@@ -85,7 +85,7 @@ class GroupedCritic(nn.Module):
 
     def __init__(self, C: CNNCritic, K: int, freeze: int = 0):
         super().__init__()
-        self.K, self.w, self.freeze = K, C.w, freeze
+        self.K, self.w, self.freeze, self.size = K, C.w, freeze, getattr(C, "size", 28)
         convs = [m for m in C.net if isinstance(m, nn.Conv2d)]
         lin = C.net[-1]
         self.specs = [(c.stride[0], c.padding[0]) for c in convs]
@@ -101,7 +101,7 @@ class GroupedCritic(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # x (K, B, 784) -> scores (K, B)
         K, B = x.shape[:2]
-        h = x.reshape(K * B, 1, 28, 28)
+        h = x.reshape(K * B, 1, self.size, self.size)
         for i in range(self.freeze):
             s, p = self.specs[i]
             h = F.leaky_relu(F.conv2d(h, getattr(self, f"c{i}_w"), getattr(self, f"c{i}_b"), s, p), 0.2)
@@ -127,15 +127,16 @@ def translate(x: torch.Tensor, max_shift: int) -> torch.Tensor:
     x (K, B, 784)."""
     if max_shift <= 0:
         return x
-    K, B = x.shape[:2]
-    img = x.reshape(K * B, 1, 28, 28) + 1                       # background -> 0 so that zero padding is background
+    K, B, D = x.shape
+    n = int(round(D ** 0.5))
+    img = x.reshape(K * B, 1, n, n) + 1                       # background -> 0 so that zero padding is background
     pad = F.pad(img, (max_shift,) * 4)
     sx = torch.randint(0, 2 * max_shift + 1, (K * B,), device=x.device)
     sy = torch.randint(0, 2 * max_shift + 1, (K * B,), device=x.device)
-    ar = torch.arange(28, device=x.device)
-    rows = (sy[:, None] + ar[None]).view(-1, 1, 28, 1).expand(-1, 1, 28, 28)
-    cols = (sx[:, None] + ar[None]).view(-1, 1, 1, 28).expand(-1, 1, 28, 28)
+    ar = torch.arange(n, device=x.device)
+    rows = (sy[:, None] + ar[None]).view(-1, 1, n, 1).expand(-1, 1, n, n)
+    cols = (sx[:, None] + ar[None]).view(-1, 1, 1, n).expand(-1, 1, n, n)
     # vectorised crop: select the 28 rows, then the 28 columns
-    pr = pad.gather(2, rows[..., :1].expand(-1, 1, 28, pad.shape[3]))           # (KB, 1, 28, W+2s)
+    pr = pad.gather(2, rows[..., :1].expand(-1, 1, n, pad.shape[3]))           # (KB, 1, 28, W+2s)
     out = pr.gather(3, cols)                                                   # (KB, 1, 28, 28)
-    return (out - 1).reshape(K, B, 784)
+    return (out - 1).reshape(K, B, D)

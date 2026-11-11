@@ -111,22 +111,79 @@ def replay(a, ext):
     print(f"[test support ceiling] {fmt(summ)}", flush=True)
 
     for tag, name in [("aug_feat09", sel["name"]), ("aug_best", best_name)]:
-        sampler = AugmentSampler(by[name]["params"])
-        for part, eps in [("dev", episodes("dev")), ("test", test)]:
-            d = Path("runs/adapt") / f"{tag}_{part}"
-            d.mkdir(parents=True, exist_ok=True)
-            pool = torch.stack([to_u8(sampler(ep, a.pool, torch.Generator().manual_seed(a.seed * 1_000_003 + ep.char)))
-                                for ep in eps])
-            torch.save({"char_ids": torch.tensor([ep.char for ep in eps]), "pool": pool}, d / "pools_0.pt")
-            (d / "config.json").write_text(json.dumps({"part": part, "max_chars": None, "method": "augment",
-                                                       "name": name, "params": by[name]["params"],
-                                                       "pool": a.pool, "seed": a.seed}, indent=1))
-            print(f"pool {d} {tuple(pool.shape)}", flush=True)
+        dump_pools(a, tag, name, by[name]["params"], test)
+
+
+def dump_pools(a, tag, name, params, test):
+    sampler = AugmentSampler(params)
+    for part, eps in [("dev", episodes("dev")), ("test", test)]:
+        d = Path("runs/adapt") / f"{tag}_{part}"
+        d.mkdir(parents=True, exist_ok=True)
+        pool = torch.stack([to_u8(sampler(ep, a.pool, torch.Generator().manual_seed(a.seed * 1_000_003 + ep.char)))
+                            for ep in eps])
+        torch.save({"char_ids": torch.tensor([ep.char for ep in eps]), "pool": pool}, d / "pools_0.pt")
+        (d / "config.json").write_text(json.dumps({"part": part, "max_chars": None, "method": "augment",
+                                                   "name": name, "params": params,
+                                                   "pool": a.pool, "seed": a.seed}, indent=1))
+        print(f"pool {d} {tuple(pool.shape)}", flush=True)
+
+
+def search_v2(a, ext):
+    """Local search under the actual rule (copy_feat >= min_copy_feat), seeded by the v1 dev frontier points with
+    copy_feat in [0.8, 1.0] + interpolations between the selected v1 config and the best points just below 0.9.
+    New points -> search_v2.json; selection over v1 + v2 -> selected_feat09_v2.json (with its test replay); pools."""
+    out = Path(a.out)
+    v1 = json.loads((out / "search.json").read_text())
+    path = out / "search_v2.json"
+    v2 = json.loads(path.read_text()) if path.exists() else []
+    done = {r["name"] for r in v2}
+    eps = episodes("dev")
+
+    def run(name, params):
+        if name in done:
+            return
+        t0 = time.time()
+        _, summ = evaluate(AugmentSampler(params), eps, ext, n_draws=a.n_draws)
+        v2.append({"name": name, "params": AugmentSampler(params).p, "objective": objective(summ), "summary": summ})
+        done.add(name)
+        path.write_text(json.dumps(v2, indent=1))
+        print(f"[{name}] {time.time() - t0:.0f}s cf={copy_feat(v2[-1]):.3f} obj={v2[-1]['objective']:.3f} "
+              f"{fmt(summ)}", flush=True)
+
+    def best_feasible():
+        ok = [r for r in v1 + v2 if copy_feat(r) >= a.min_copy_feat]
+        return max(ok, key=lambda r: r["objective"])
+
+    front = [r for r in pareto(v1) if 0.8 <= copy_feat(r) <= 1.0]
+    print("seeds:", [(r["name"], round(copy_feat(r), 3), round(r["objective"], 3)) for r in front], flush=True)
+    sel1 = best_feasible()
+    below = sorted([r for r in front if copy_feat(r) < a.min_copy_feat], key=lambda r: -r["objective"])[:2]
+    for b in below:                                                       # interpolations sel1 <-> points below 0.9
+        for t in (0.2, 0.35, 0.5, 0.65, 0.8):
+            run(f"v2_interp_{b['name']}_{int(t * 100)}",
+                {k: (1 - t) * sel1["params"][k] + t * b["params"][k] for k in SPACE})
+    rng = np.random.default_rng(a.seed + 2)
+    for i in range(a.n_seed_jitter):                                      # perturbations around the frontier seeds
+        run(f"v2_seed{i:03d}", jitter(front[i % len(front)]["params"], rng, s=0.25))
+    for i in range(a.n_local):                                            # adaptive: around the current best feasible
+        run(f"v2_local{i:03d}", jitter(best_feasible()["params"], rng, s=0.2 if i % 2 else 0.35))
+
+    sel = best_feasible()
+    test = episodes("test")
+    _, tsum = evaluate(AugmentSampler(sel["params"]), test, ext, n_draws=a.n_draws)
+    (out / "selected_feat09_v2.json").write_text(json.dumps({
+        "selection": f"max dev objective s.t. copy_feat >= {a.min_copy_feat}, over search.json + search_v2.json",
+        "name": sel["name"], "params": sel["params"], "objective": sel["objective"], "summary": sel["summary"],
+        "test_objective": objective(tsum), "test_summary": tsum}, indent=1))
+    print(f"\nSELECTED v2 {sel['name']} {sel['params']}\n  dev  {fmt(sel['summary'])}\n  test {fmt(tsum)}", flush=True)
+    dump_pools(a, "aug_feat09v2", sel["name"], sel["params"], test)
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--replay", action="store_true", help="apply the copy_feat rule, evaluate on test, dump pools")
+    ap.add_argument("--search-v2", action="store_true", help="local search under the copy_feat rule (+ test, pools)")
+    ap.add_argument("--n-seed-jitter", type=int, default=30)
     ap.add_argument("--min-copy-feat", type=float, default=0.9)
     ap.add_argument("--pool", type=int, default=100)
     ap.add_argument("--out", default="runs/augment")
@@ -146,6 +203,8 @@ def main():
     ext = FeatureExtractor.load(a.clf, dev)
     if a.replay:
         return replay(a, ext)
+    if a.search_v2:
+        return search_v2(a, ext)
     eps = episodes("dev", max_chars=a.max_chars)
     print(f"{len(eps)} dev episodes, device {dev}", flush=True)
 

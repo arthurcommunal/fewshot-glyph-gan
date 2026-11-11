@@ -124,7 +124,9 @@ All on dev (345 characters) unless stated.
 - **The novelty threshold (copy_feat ≥ 0.9) is a choice.** It was fixed before any test run and the whole frontier is
   shown; the GAN stays above the augmentation frontier everywhere above about 0.65, and the gap closes in the copy
   regime, where returning shifted copies of the support is hard to beat.
-- One adaptation seed per configuration. Reruns of the selected configuration reproduce dev 0.771/0.772 and test 0.746/0.745.
+- **Seeds.** Three adaptation seeds of the selected configuration on test give 0.755 / 0.755 / 0.753 (paired
+  differences within ±0.001). Other configurations were run with one seed. The dev selection between LoRA r=16 (0.7724)
+  and full fine-tuning (0.7720) is a near-tie that the pre-registered rule settles; both are reported.
 
 ## Reproduce
 

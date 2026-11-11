@@ -106,9 +106,10 @@ def main():
     eval_steps = sorted({int(s) for s in a.eval_steps.split(",") if int(s) <= a.steps})
 
     ck = torch.load(a.ckpt, map_location="cpu")
-    G = new_generator(); G.load_state_dict(ck["G_ema"])
-    C = CNNCritic(ck["critic_w"]); C.load_state_dict(ck["critic"])
-    eps = episodes(a.part, max_chars=a.max_chars)
+    size = ck.get("size", 28)
+    G = new_generator(size * size); G.load_state_dict(ck["G_ema"])
+    C = CNNCritic(ck["critic_w"], size); C.load_state_dict(ck["critic"])
+    eps = episodes(a.part, max_chars=a.max_chars, size=size)
     pools: dict[str, list] = {}
     adapters, char_ids = [], []
     diag = open(out / "diag.jsonl", "w")
@@ -140,7 +141,7 @@ def main():
             if step > 0:
                 variants(Gb, Cb, z_pool, step, pools, a)
             if c0 == 0:
-                grid = torch.cat([S[:8], x[:8, :20]], 1).reshape(-1, 1, 28, 28)
+                grid = torch.cat([S[:8], x[:8, :20]], 1).reshape(-1, 1, size, size)
                 torchvision.utils.save_image((grid + 1) / 2, out / f"grid_{step}.png", nrow=n_sup + 20)
 
         if 0 in eval_steps:
