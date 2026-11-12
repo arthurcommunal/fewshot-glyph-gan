@@ -1,3 +1,5 @@
+https://github.com/user-attachments/assets/7f624f6b-2570-4446-965b-14fc41a42b90
+
 # fewshot-glyph-gan
 
 Adapting a small, fixed-architecture GAN to a new handwritten symbol from 10 drawings.
