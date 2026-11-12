@@ -1,6 +1,6 @@
 """Save a grid of generated digits, whatever the method used to train the generator.
 
-Usage: python visualize.py runs/wgan_local/best_g.pth
+Usage: python -m mnist.visualize runs/wgan_local/best_g.pth
 """
 import argparse
 from pathlib import Path

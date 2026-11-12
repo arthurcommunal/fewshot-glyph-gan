@@ -1,6 +1,6 @@
 """Generate 10 000 MNIST samples as PNGs in samples/ (0.png ... 9999.png).
 
-    python generate.py --batch_size 256
+    python -m mnist.generate --batch_size 256
 
 Loads checkpoints/G.pth (the fixed Generator). If checkpoints/critic.pth AND checkpoints/refine.json exist,
 each latent z ~ N(0, I) is first refined by gradient ascent on the critic score (the generator is unchanged):
@@ -60,7 +60,7 @@ def load_refinement(device):
         if os.path.exists(c_path) or os.path.exists(j_path):
             print("WARNING: critic.pth and refine.json must both be present; generating without refinement.")
         return None, None
-    from critic_model import load_critic
+    from mnist.critic_model import load_critic
     with open(j_path) as f:
         spec = json.load(f)
     if spec.get("method", "ascent") not in ("ascent", "dot", "none"):

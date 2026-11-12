@@ -7,7 +7,7 @@ k_eff is an estimate of the Lipschitz constant of z -> C(G(z)) (Tanaka, 2019, la
 Dividing by k_eff makes eps independent of the scale of the critic. It is computed once here, never in generate.py.
 
 Final model (k_eff = 0.425477):
-    python -m models.critic.refine_config --generator checkpoints/G.pth --critic checkpoints/critic.pth --eps 0.02 --K 20 --seed 201
+    python -m mnist.models.critic.refine_config --generator checkpoints/G.pth --critic checkpoints/critic.pth --eps 0.02 --K 20 --seed 201
 """
 import argparse
 import json

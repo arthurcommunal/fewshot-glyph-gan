@@ -1,4 +1,4 @@
-"""Pre-registered selection rule (README, "Problem and protocol"): on dev, maximise the objective subject to copy_feat >= 0.9.
+"""Selection rule: on dev, maximise the objective subject to copy_feat >= 0.9.
 
     python -m scripts.select_rule runs/adapt/g2_* [--min_copy 0.9] [--out runs/select_dev.json]
 

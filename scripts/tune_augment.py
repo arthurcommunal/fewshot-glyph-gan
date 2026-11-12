@@ -79,7 +79,7 @@ def to_u8(x):
 
 
 def replay(a, ext):
-    """Pre-registered rule (README, "Problem and protocol"): max dev objective s.t. copy_feat >= 0.9, replayed once on test, plus
+    """Selection rule: max dev objective s.t. copy_feat >= 0.9, replayed once on test, plus
     the dev Pareto frontier, references and the real ceiling on test; uint8 pools for scripts.eval_pools."""
     out = Path(a.out)
     results = json.loads((out / "search.json").read_text())

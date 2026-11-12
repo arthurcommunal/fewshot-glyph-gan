@@ -1,4 +1,4 @@
-"""Report figures on the fidelity-novelty frontier (README, "Problem and protocol").
+"""Figures for the README: fidelity-novelty frontier, identity, sample grids.
 
     python -m scripts.figures --runs g1_full_lr3e-4 g1_lora4_lr1e-3 "g1_lora4_noaug=LoRA r=4, no DiffAug" \
         --pools g1_lora4_lr1e-3:1000 --out docs/figures [--only frontier,identity,samples]
@@ -8,20 +8,11 @@
   samples.png   a few characters of --part: support | pools given by --pools (augmentation pools included)
                 [| on-the-fly AugmentSampler column with --aug-params]
 
---variants base,r10x0.1 filters labels; --selected RUN:LABEL and --aug-selected (JSON or name/tag in --search) draw
-the pre-registered selections as stars. GAN points outside the axes are not drawn (listed in the footnote).
-
---runs RUN[=FAMILY]: runs under <root>/adapt/; the family (colour + line style) defaults to "Full FT" / "LoRA r=<r>"
-(+ "no DiffAug" when shift = 0). Each run is a line through its training steps; eval labels "<step>_<variant>"
-(t<psi> = truncation, r<n>x<eta> = critic-guided refinement) are drawn as separate markers linked to their step.
-
-CI of the objective: the objective is a function of two means, so its 95% CI uses the delta method. With per-character
-rows (adapt evals) the linearised per-character values a*P_i + b*C_i give the exact delta-method interval; without rows
-(augmentation search, summaries only) a*ci_P + b*ci_C is used, an upper bound (correlation 1 between P and C).
+--selected RUN:LABEL and --aug-selected mark the configurations chosen by the selection rule (stars).
+Each run is drawn as a line through its eval steps; variants (t = truncation, r = refinement) as extra markers.
+The objective CI uses the delta method (harmonic mean of two means).
 """
 import argparse
-
-ARGS_PART = "dev"
 import json
 import re
 from pathlib import Path
@@ -34,7 +25,6 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from scipy import stats  # noqa: E402
 
-# Categorical palette (colour-blind-checked order), greys for the baseline, text inks.
 PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
 LINESTYLES = ["-", "--", "-.", ":", (0, (5, 1, 1, 1, 1, 1)), (0, (8, 2)), (0, (1, 1)), (0, (3, 1, 3, 3))]
 GREY_PT, GREY_LINE, INK, INK2 = "#b4b2ad", "#52514e", "#0b0b0b", "#52514e"
@@ -135,7 +125,7 @@ def load_aug_selected(spec: str | None, search: list[Path]) -> dict | None:
 
 
 def load_selected(root: Path, spec: str | None) -> dict | None:
-    """RUN:LABEL -> the pre-registered selected GAN point (<root>/adapt/RUN/eval_LABEL.json)."""
+    """RUN:LABEL -> the GAN point selected by the rule (<root>/adapt/RUN/eval_LABEL.json)."""
     if not spec:
         return None
     run, _, label = spec.partition(":")
@@ -155,7 +145,7 @@ def pareto_upper(pts: list[dict], y: str) -> list[dict]:
 
 # ---------------------------------------------------------------- scatter figures
 def frontier_fig(runs, aug, real, y: str, ylabel: str, title: str, out: Path, annotate: str | None,
-                 xlim=None, ylim=None, sel_gan: dict | None = None, sel_aug: dict | None = None):
+                 xlim=None, ylim=None, sel_gan: dict | None = None, sel_aug: dict | None = None, part: str = "dev"):
     fig, ax = plt.subplots(figsize=(8.2, 5.6))
     ycol = y
 
@@ -221,7 +211,7 @@ def frontier_fig(runs, aug, real, y: str, ylabel: str, title: str, out: Path, an
     for var, m in vmark.items():                                           # legend-only handles for variants
         ax.plot([], [], m, ms=7, color="white", mec=INK, mew=0.9, ls="none", label=variant_name(var))
 
-    # pre-registered selections (max dev objective s.t. copy_feat >= 0.9): stars + short labels
+    # configurations selected by the rule (max dev objective s.t. copy_feat >= 0.9): stars + short labels
     for p, txt, col, off, ha in [(sel_gan, "selected GAN", INK, (8, 8), "left"),
                                  (sel_aug, "selected augmentation", GREY_LINE, (-10, 9), "right")]:
         if p and inside(p):
@@ -248,7 +238,7 @@ def frontier_fig(runs, aug, real, y: str, ylabel: str, title: str, out: Path, an
 
     ns = sorted({p["n"] for p in gan_all})
     hid_aug = sum(not inside(p) for p in aug)
-    note = (f"{ARGS_PART.capitalize()} split. GAN runs: {'/'.join(map(str, ns))} characters; augmentation and real "
+    note = (f"{part.capitalize()} split. GAN runs: {'/'.join(map(str, ns))} characters; augmentation and real "
             f"reference: {aug[0]['n']} characters. Error bars: 95% CI across characters (objective: delta method).")
     parts = []
     if hidden:
@@ -284,7 +274,7 @@ def strip(imgs: np.ndarray, sep: int = 2) -> np.ndarray:
 
 
 def samples_fig(root: Path, pools: list[str], best_path: Path | None, n_chars: int, char_ids: list[int] | None, n: int,
-                seed: int, out: Path):
+                seed: int, out: Path, part: str = "dev"):
     import torch
 
     from glyphgan.augment import AugmentSampler
@@ -298,7 +288,7 @@ def samples_fig(root: Path, pools: list[str], best_path: Path | None, n_chars: i
         ids = [int(c) for c in d["char_ids"]]
         loaded.append((title or f"GAN: {run} @ {label}",{c: i for i, c in enumerate(ids)}, d["pool"]))
     common = set.intersection(*(set(m) for _, m, _ in loaded))
-    eps = {ep.char: ep for ep in episodes(ARGS_PART) if ep.char in common}
+    eps = {ep.char: ep for ep in episodes(part) if ep.char in common}
     if char_ids is None:
         rng = np.random.default_rng(seed)
         char_ids = sorted(rng.choice(sorted(eps), size=min(n_chars, len(eps)), replace=False).tolist())
@@ -342,7 +332,7 @@ def main():
                          "runs/augment/selected_feat09.json); default none, pass augmentation pools via --pools")
     ap.add_argument("--variants", default=None,
                     help="label suffixes to show, comma list: 'base' = training steps, e.g. base,r10x0.1 (default all)")
-    ap.add_argument("--selected", default=None, help="RUN:LABEL of the pre-registered GAN selection (star)")
+    ap.add_argument("--selected", default=None, help="RUN:LABEL of the selected GAN configuration (star)")
     ap.add_argument("--aug-selected", default=None,
                     help="selected augmentation config (star): a JSON with 'summary' or a name/tag in --search")
     ap.add_argument("--real", default="runs/eval/support_dev.json")
@@ -359,8 +349,6 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--part", default="dev", help="dev or test (footnote and episodes for samples.png)")
     a = ap.parse_args()
-    global ARGS_PART
-    ARGS_PART = a.part
 
     root, out = Path(a.root), Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -377,15 +365,15 @@ def main():
         if "frontier" in only:
             frontier_fig(runs, aug, real, "objective", "Fidelity: objective = harmonic mean(precision, coverage)",
                          "GAN vs augmentation on the fidelity–novelty plane", out / "frontier.png", ann,
-                         a.xlim, a.ylim, **sel)
+                         a.xlim, a.ylim, **sel, part=a.part)
         if "identity" in only:
             frontier_fig(runs, aug, real, "identity", "Identity accuracy (nearest prototype in the alphabet)",
                          "Do samples stay recognisable as the target character?", out / "identity.png", ann,
-                         a.xlim, a.ylim_identity, **sel)
+                         a.xlim, a.ylim_identity, **sel, part=a.part)
     if "samples" in only:
         assert a.pools, "samples.png needs --pools RUN:LABEL"
         samples_fig(root, a.pools, Path(a.aug_params) if a.aug_params else None, a.n_chars, a.chars, a.n, a.seed,
-                    out / "samples.png")
+                    out / "samples.png", a.part)
 
 
 if __name__ == "__main__":

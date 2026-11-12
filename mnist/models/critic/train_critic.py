@@ -3,7 +3,7 @@
 The critic is the CNN of critic_model.py, trained with the WGAN-GP loss (Gulrajani et al., 2017):
     L = E[C(G(z))] - E[C(x)] + lambda * E[(||grad C(x_hat)|| - 1)^2],   x_hat = a x + (1 - a) G(z).
 The generator is never updated. Final model:
-    python -m models.critic.train_critic --generator runs/T2_clip_cont/best_ema_g.pth \
+    python -m mnist.models.critic.train_critic --generator runs/T2_clip_cont/best_ema_g.pth \
         --init_from runs/critic_5e5/critic_18000.pth --n_steps 100000 --run_name critic_t2
 then copy runs/critic_t2/critic_98000.pth to checkpoints/critic.pth. The checkpoint was chosen among 30k, 60k and 98k
 steps on validation Inception FID (metrics/fid_inception.py). Our critic started from a critic trained 18k steps on the

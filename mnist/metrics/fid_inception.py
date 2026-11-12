@@ -4,9 +4,9 @@ Standard FID (Heusel et al., 2017): 2048-d pool features of Inception-v3 from py
 its weights are downloaded on first use). Grey 28x28 images are repeated on 3 channels and resized to 299x299 by
 the network. The real images are read from the MNIST files as uint8, exactly like the generated PNGs.
 
-    python generate.py --batch_size 256
-    python -m metrics.fid_inception --samples_dir samples --ref train10k   # tuning (first 10k training images)
-    python -m metrics.fid_inception --samples_dir samples --ref test        # final check only
+    python -m mnist.generate --batch_size 256
+    python -m mnist.metrics.fid_inception --samples_dir samples --ref train10k   # tuning (first 10k training images)
+    python -m mnist.metrics.fid_inception --samples_dir samples --ref test        # final check only
 """
 import argparse
 from pathlib import Path

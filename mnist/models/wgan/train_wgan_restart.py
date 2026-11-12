@@ -1,8 +1,8 @@
 """Continue a WGAN training from a checkpoint (warm restart) and keep an EMA of the generator.
 
 Used for the runs T2 and T4 of the final model:
-    T2: python -m models.wgan.train_wgan_restart --init_from runs/wgan_local_step5e5/last.pth --lr 2e-5 --n_steps 600000 --run_name T2_clip_cont
-    T4: python -m models.wgan.train_wgan_restart --init_from runs/T2_clip_cont/last.pth --lr 1e-5 --n_steps 548000 --run_name T4_clip_cont2
+    T2: python -m mnist.models.wgan.train_wgan_restart --init_from runs/wgan_local_step5e5/last.pth --lr 2e-5 --n_steps 600000 --run_name T2_clip_cont
+    T4: python -m mnist.models.wgan.train_wgan_restart --init_from runs/T2_clip_cont/last.pth --lr 1e-5 --n_steps 548000 --run_name T4_clip_cont2
 
 The generator, the critic and the RMSProp states are loaded from --init_from (a last.pth written by train_wgan.py
 or by this script); only the learning rate restarts: linear warmup, then cosine decay to 1 % of --lr.

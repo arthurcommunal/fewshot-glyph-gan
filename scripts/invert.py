@@ -1,14 +1,9 @@
-"""Prior-only baseline: GAN inversion in the latent space of the frozen pretrained generator (no weight change).
+"""Prior-only baseline: invert the support images into the latent space of the frozen generator, sample around them.
 
     python -m scripts.invert --ckpt runs/pretrain/gp_a/ckpt_30000.pt --run invert_a --part dev
 
-Per character (K characters at a time, all on GPU): each of the 10 support images x_j is inverted into z_j by Adam
-on  ||G(z) - x_j||^2 / 784  +  feat * (1 - <f(G(z)), f(x_j)>)  +  prior * (||z|| / sqrt(d) - 1)^2,  with f the
-frozen metric embedding (unit norm) and several random restarts per support (the lowest final loss is kept).
-Pool of P samples: G(z_i + sigma * eps), i uniform over the 10 inverted latents, eps ~ N(0, I); the same (i, eps)
-are reused for every sigma. Answers "is the pretrained latent space already enough, without adapting weights?".
-Writes runs/adapt/<run>/{config.json, pools_<k>.pt (k = sigma index, see config["sigmas"]), recon.json, grid.png},
-evaluated with `python -m scripts.eval_pools runs/adapt/<run>`.
+Each support image is inverted with Adam (pixel MSE + feature loss + a prior on ||z||, several restarts), then samples
+are G(z_i + sigma * eps). Pools are written like scripts/adapt.py, so they are scored with scripts/eval_pools.py.
 """
 import argparse
 import json

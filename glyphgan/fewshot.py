@@ -1,8 +1,7 @@
 """Few-shot adaptation of ONE new symbol, for interactive use (scripts/demo.py).
 
-Same loop and defaults as scripts/adapt.py with K = 1, i.e. the configuration selected on dev by the pre-registered
-rule: LoRA r = 16 on fc1..fc4, lr 1e-4, 1500 steps, FreezeD 2, DiffAugment translation 2 px, then critic-guided latent
-refinement (10 steps of 0.1) at sampling time.
+Same loop as scripts/adapt.py with K = 1 and the configuration selected on dev: LoRA r = 16 on fc1..fc4, lr 1e-4,
+1500 steps, FreezeD 2, DiffAugment translation 2 px, then critic-guided latent refinement (10 steps of 0.1).
 """
 from dataclasses import dataclass
 from typing import Callable
