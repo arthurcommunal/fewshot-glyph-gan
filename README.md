@@ -19,16 +19,13 @@ set with the same rule, fixed before any test run (see Protocol). 95% CIs from a
 | *Ref.* returning the 10 support drawings | 0.882 | 0.855 | 0.911 | 0.915 | 0 |
 
 Precision / coverage are computed against the 10 held-out drawings of the character in a learned feature space, and
-the objective is their harmonic mean. Identity: is the sample closest to the right character within its alphabet.
+the objective is their harmonic mean. Identity: fraction of samples whose nearest character prototype (mean feature of its held-out drawings), among the characters of the same alphabet, is the right one.
 copy_feat: distance to the support relative to the spread of the support (fresh human drawings ≈ 1, copies = 0).
 
 GAN − augmentation (paired): objective +0.166 [+0.151, +0.181], identity +0.019 [+0.009, +0.030]. A LoRA adapter of
-71k parameters per symbol (about 140 KB in fp16) is as good as full fine-tuning.
+71k parameters per symbol is as good as full fine-tuning.
 
-Note on the baseline: after the first test run, re-reading the evaluation code showed that the augmentation search had
-been refined under a pixel-space copy constraint instead of the feature-space one used by the rule. I ran a second
-search on dev (85 configurations) under the right constraint and replayed its pick once on test: the baseline went
-from 0.542 to 0.589, and the table uses this stronger number.
+Note on the baseline: in the first test run, the augmentation baseline had been tuned with novelty measured in pixel space, whereas the GAN was selected with novelty measured in feature space (copy_feat, see Protocol). I re-tuned it on dev under the same constraint as the GAN (85 configurations) and ran the selected configuration once on test. Its score went from 0.542 to 0.589 and the table reports the higher one.
 
 ## Background
 
@@ -102,7 +99,7 @@ On dev (345 characters) unless stated:
   The native 105×105 resolution would make the output layer 14× larger, mostly for empty pixels.
 - All metrics live in one feature space. Identity is only a partial cross-check.
 - The 0.9 novelty threshold is a choice. The full frontier is shown: the GAN stays above augmentation for copy_feat
-  above about 0.65; below that, shifted copies of the support are hard to beat.
+  above about 0.65. Below that, shifted copies of the support are hard to beat.
 - The baseline fix described above came after the first test run (search on dev, one replay on test).
 - Seeds: three adaptation seeds of the selected configuration give 0.755 / 0.755 / 0.753 on test; other
   configurations have one seed. On dev, LoRA r=16 (0.7724) vs full fine-tuning (0.7720) is a tie broken by the rule.
